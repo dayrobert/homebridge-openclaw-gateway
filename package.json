@@ -2,10 +2,12 @@
   "name": "homebridge-openclaw-gateway",
   "displayName": "OpenClaw Gateway",
   "version": "3.1.0",
-  "description": "Expose a REST API so OpenClaw agents can list and control HomeKit devices via Homebridge.",
+  "description": "Expose a REST API and built-in event engine so OpenClaw agents can control HomeKit devices and react to state changes via Homebridge.",
   "main": "index.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "publish:npm": "npm publish --cache /tmp/openclaw-npm-cache",
+    "publish:npm:dry-run": "npm pack --dry-run --cache /tmp/openclaw-npm-cache"
   },
   "keywords": [
     "homebridge-plugin",
