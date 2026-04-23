@@ -21,17 +21,15 @@
 
 'use strict';
 
-const express = require('express');
-const rateLimit = require('express-rate-limit');
-
-const { PLUGIN_NAME, ACCESSORY_NAME, DEFAULT_PORT, DEFAULT_BIND, DEFAULT_RATE_LIMIT, DEFAULT_SESSION_TTL, ROOMS_FILE_NAME } = require('./lib/constants');
-const { createApiAuth } = require('./lib/auth');
+const { PLUGIN_NAME, ACCESSORY_NAME, ROOMS_FILE_NAME } = require('./lib/constants');
 const { detectStoragePath, resolveApiToken } = require('./lib/storage');
 const { RoomStore, normalizeRoomName, normalizeRoomKey } = require('./lib/room-store');
 const { UiClient } = require('./lib/ui-client');
 const { parseAccessories, mapType, resolveAction, clamp } = require('./lib/devices');
 const { EventQueue, classifyPriority, diffSnapshot, formatEventDescription } = require('./lib/events');
+const { createApiAuth } = require('./lib/auth');
 const { setupRoutes } = require('./lib/routes');
+const { startApiServer } = require('./lib/server');
 
 // ─── Homebridge registration ─────────────────────────────────────────────────
 
@@ -64,74 +62,12 @@ class OpenClawPlatform {
   }
 
   async _startServer() {
-    const port = this.config.apiPort || DEFAULT_PORT;
-    const bind = this.config.apiBind || DEFAULT_BIND;
-    const rpmLimit = this.config.rateLimit || DEFAULT_RATE_LIMIT;
-
-    try {
-      await this.uiClient.token();
-      this.log.info(`[${PLUGIN_NAME}] Connected to Config UI X (${this.uiClient.authMode}).`);
-    } catch (err) {
-      this.log.error(`[${PLUGIN_NAME}] Config UI X auth failed: ${err.message}`);
-    }
-
-    const app = express();
-    app.use(express.json());
-    app.set('trust proxy', 1);
-    app.use(rateLimit({
-      windowMs: 60 * 1000,
-      max: rpmLimit,
-      standardHeaders: true,
-      legacyHeaders: false,
-      message: { error: 'Too Many Requests', message: `Rate limit: ${rpmLimit} requests per minute.` },
-    }));
-
-    const roomStore = new RoomStore(this.storagePath, this.log);
-
-    // Event framework: in-memory queue populated by an internal state poller
-    const eventQueue = new EventQueue(this.config.eventQueueSize || 200);
-    let lastSnapshot = new Map();
-
-    const primeAndPoll = async () => {
-      try {
-        const raw = await this.uiClient.getAccessories();
-        const devices = parseAccessories(raw, roomStore);
-        const diffs = diffSnapshot(lastSnapshot, devices);
-        for (const { device, changes } of diffs) {
-          eventQueue.push({
-            id: device.id,
-            name: device.name,
-            type: device.type,
-            room: device.room,
-            changes,
-            priority: classifyPriority(device, changes),
-          });
-        }
-        lastSnapshot = new Map(devices.map(d => [d.id, d]));
-      } catch (err) {
-        this.log.debug(`[${PLUGIN_NAME}] State poll error: ${err.message}`);
-      }
-    };
-
-    await primeAndPoll();
-    this.log.info(`[${PLUGIN_NAME}] Event poller started (interval: ${this.config.pollInterval || 30}s, queue: ${this.config.eventQueueSize || 200}).`);
-
-    const pollMs = Math.max(10, Math.min(300, this.config.pollInterval || 30)) * 1000;
-    const pollTimer = setInterval(primeAndPoll, pollMs);
-    pollTimer.unref();
-
-    const externalUrl = (this.config.pluginExternalUrl || `http://localhost:${port}`).replace(/\/+$/, '');
-    const apiAuth = createApiAuth(this.apiToken, this.apiToken, this.config.sessionTokenTtl || DEFAULT_SESSION_TTL);
-    setupRoutes(app, apiAuth, this.uiClient, roomStore, eventQueue, {
-      externalUrl,
-      bootstrapToken: this.apiToken,
-    });
-
-    const server = app.listen(port, bind, () => {
-      this.log.info(`[${PLUGIN_NAME}] REST API listening on ${bind}:${port}`);
-    });
-    server.on('error', err => {
-      this.log.error(`[${PLUGIN_NAME}] Server error: ${err.message}`);
+    await startApiServer({
+      config: this.config,
+      log: this.log,
+      storagePath: this.storagePath,
+      apiToken: this.apiToken,
+      uiClient: this.uiClient,
     });
   }
 }
