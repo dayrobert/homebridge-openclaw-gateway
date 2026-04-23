@@ -35,14 +35,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/davidevp/homebridge-openclaw.git"
+    "url": "git+https://github.com/dayrobert/homebridge-openclaw.git"
   },
-  "homepage": "https://github.com/davidevp/homebridge-openclaw#readme",
+  "homepage": "https://github.com/dayrobert/homebridge-openclaw#readme",
   "bugs": {
-    "url": "https://github.com/davidevp/homebridge-openclaw/issues"
-  },
-  "funding": {
-    "type": "paypal",
-    "url": "https://paypal.me/davidevp"
+    "url": "https://github.com/dayrobert/homebridge-openclaw/issues"
   }
 }
