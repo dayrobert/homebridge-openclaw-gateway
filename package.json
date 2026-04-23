@@ -2,7 +2,7 @@
   "name": "homebridge-openclaw-gateway",
   "displayName": "OpenClaw Gateway",
   "version": "3.1.0",
-  "description": "Expose a REST API and built-in event engine so OpenClaw agents can control HomeKit devices and react to state changes via Homebridge.",
+  "description": "Homebridge plugin for OpenClaw with a HomeKit control API and built-in event engine for automation and state-change triggers.",
   "main": "index.js",
   "scripts": {
     "test": "node --test",
@@ -14,8 +14,16 @@
     "homebridge",
     "homekit",
     "openclaw",
+    "openclaw-gateway",
+    "automation",
+    "events",
+    "triggers",
+    "agent",
+    "agents",
     "smart-home",
-    "rest-api"
+    "rest-api",
+    "api",
+    "webhook"
   ],
   "engines": {
     "node": ">=18.0.0",
