@@ -58,6 +58,28 @@
         "title": "Config UI X Password",
         "type": "string",
         "description": "Only required if automatic credential detection fails (non-Docker setups)."
+      },
+      "pollInterval": {
+        "title": "State Poll Interval (seconds)",
+        "type": "integer",
+        "default": 30,
+        "minimum": 10,
+        "maximum": 300,
+        "description": "How often the plugin checks HomeKit for state changes to populate the event queue (10-300s)."
+      },
+      "eventQueueSize": {
+        "title": "Event Queue Size",
+        "type": "integer",
+        "default": 200,
+        "minimum": 50,
+        "maximum": 1000,
+        "description": "Maximum number of events held in memory. Oldest events are dropped when the queue is full."
+      },
+      "pluginExternalUrl": {
+        "title": "Plugin External URL",
+        "type": "string",
+        "placeholder": "http://homebridge.local:8899",
+        "description": "The URL OpenClaw uses to reach this plugin. Used in the /api/setup bundle. Defaults to http://localhost:<apiPort>."
       }
     },
     "required": ["name"]
@@ -77,6 +99,16 @@
       "title": "Authentication",
       "description": "The token is auto-generated if left empty. Only fill the UI credentials if auto-detection does not work.",
       "items": ["token"]
+    },
+    {
+      "type": "fieldset",
+      "title": "Event Framework",
+      "expandable": true,
+      "items": [
+        { "key": "pollInterval", "type": "number" },
+        { "key": "eventQueueSize", "type": "number" },
+        "pluginExternalUrl"
+      ]
     },
     {
       "type": "fieldset",
