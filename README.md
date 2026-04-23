@@ -28,7 +28,7 @@ Add to your Homebridge `config.json` under **`platforms`**:
 }
 ```
 
-The plugin will automatically detect UI credentials, generate a unique API token, and listen on port 8865.
+The plugin will automatically detect UI credentials, generate a unique bootstrap token, and listen on port 8865.
 
 ### Advanced configuration
 
@@ -39,6 +39,7 @@ The plugin will automatically detect UI credentials, generate a unique API token
   "apiPort": 8865,
   "apiBind": "0.0.0.0",
   "token": "my-custom-token",
+  "sessionTokenTtl": 300,
   "rateLimit": 100,
   "pollInterval": 30,
   "eventQueueSize": 200,
@@ -53,7 +54,8 @@ The plugin will automatically detect UI credentials, generate a unique API token
 |-----------|------|---------|-------------|
 | `apiPort` | number | `8865` | REST server port |
 | `apiBind` | string | `0.0.0.0` | Bind address (`127.0.0.1` = local only) |
-| `token` | string | auto | Bearer token for OpenClaw API calls |
+| `token` | string | auto | Bootstrap token used to mint short-lived API session tokens |
+| `sessionTokenTtl` | number | `300` | Session token lifetime in seconds (60-3600) |
 | `rateLimit` | number | `100` | Max requests per minute per IP |
 | `pollInterval` | number | `30` | How often (seconds) the plugin checks HomeKit for state changes (10–300) |
 | `eventQueueSize` | number | `200` | Max events held in memory; oldest are dropped when full (50–1000) |
@@ -68,7 +70,7 @@ The plugin will automatically detect UI credentials, generate a unique API token
 The plugin reads Homebridge internal files (`.uix-secrets` and `auth.json`) to sign valid JWTs. **No username or password is required in `config.json`.**
 Only if those files are unavailable (e.g. non-Docker setups), `homebridgeUiUser` / `homebridgeUiPass` are used as fallback.
 
-**API token (OpenClaw → plugin)**
+**Bootstrap token (OpenClaw → plugin)**
 Resolved in this order:
 
 1. **Environment variable** `OPENCLAW_HB_TOKEN` — ideal for Docker Compose / Kubernetes.
@@ -76,10 +78,12 @@ Resolved in this order:
 3. **`token`** in `config.json` — manual fallback.
 4. **Auto-generated** — if none of the above exist, a unique token is generated (HMAC of Homebridge secretKey), saved to `.openclaw-token`, and printed in the logs.
 
+Use this token only to call `POST /api/auth/session`. Normal API endpoints now require the returned short-lived session token.
+
 **Rate limiting**
 Default: 100 requests per minute per IP. Configurable via `rateLimit`.
 
-### Getting the token for OpenClaw
+### Getting the bootstrap token for OpenClaw
 
 **Option A: Read the file (recommended)**
 After first start, the token is in:
@@ -95,11 +99,11 @@ cat /Volumes/docker/HomeBridge/.openclaw-token
 ```
 
 **Option B: Check the logs**
-On first start, the token is printed in the Homebridge logs:
+On first start, the bootstrap token is printed in the Homebridge logs:
 
 ```
 [homebridge-openclaw-gateway] ────────────────────────────────────────
-[homebridge-openclaw-gateway] API Token: abc123...
+[homebridge-openclaw-gateway] Bootstrap Token: abc123...
 [homebridge-openclaw-gateway] Configure this token in your OpenClaw agent.
 [homebridge-openclaw-gateway] ────────────────────────────────────────
 ```
@@ -118,28 +122,38 @@ Configure the same value in OpenClaw.
 
 Base URL: `http://<homebridge-ip>:8865`
 
-All requests (except `/health`) require:
+Authentication flow:
+
+1. Exchange the bootstrap token for a session token:
 
 ```
-Authorization: Bearer <token>
+POST /api/auth/session
+Authorization: Bearer <bootstrap-token>
+```
+
+2. Use the returned session token on normal API requests:
+
+```
+Authorization: Bearer <session-token>
 ```
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/health` | GET | No | Health check |
-| `/api/devices` | GET | Yes | List all devices with current state |
-| `/api/devices/type/<type>` | GET | Yes | Filter by type (`switch`, `lightbulb`, etc.) |
-| `/api/devices/<id>` | GET | Yes | Single device state |
-| `/api/devices/<id>/control` | POST | Yes | Control one device |
-| `/api/devices/control` | POST | Yes | Control multiple devices |
-| `/api/rooms` | GET | Yes | List learned rooms |
-| `/api/rooms/<room>/devices` | GET | Yes | List devices in a learned room |
-| `/api/rooms/learn` | POST | Yes | Learn multiple room assignments |
-| `/api/devices/<id>/room` | POST | Yes | Assign or update a device room |
-| `/api/devices/<id>/room` | DELETE | Yes | Remove a learned device room |
-| `/api/events` | GET | Yes | State-change events since a cursor |
-| `/api/events/summary` | GET | Yes | Compact summary of events since a cursor |
-| `/api/setup` | GET | Yes | OpenClaw self-configuration bundle |
+| `/api/auth/session` | POST | Bootstrap token | Mint a short-lived session token |
+| `/api/devices` | GET | Session token | List all devices with current state |
+| `/api/devices/type/<type>` | GET | Session token | Filter by type (`switch`, `lightbulb`, etc.) |
+| `/api/devices/<id>` | GET | Session token | Single device state |
+| `/api/devices/<id>/control` | POST | Session token | Control one device |
+| `/api/devices/control` | POST | Session token | Control multiple devices |
+| `/api/rooms` | GET | Session token | List learned rooms |
+| `/api/rooms/<room>/devices` | GET | Session token | List devices in a learned room |
+| `/api/rooms/learn` | POST | Session token | Learn multiple room assignments |
+| `/api/devices/<id>/room` | POST | Session token | Assign or update a device room |
+| `/api/devices/<id>/room` | DELETE | Session token | Remove a learned device room |
+| `/api/events` | GET | Session token | State-change events since a cursor |
+| `/api/events/summary` | GET | Session token | Compact summary of events since a cursor |
+| `/api/setup` | GET | Bootstrap or session token | OpenClaw self-configuration bundle |
 
 ---
 
@@ -266,16 +280,20 @@ Every 1 minute (cron):
 
 **Setup endpoint**
 
-`GET /api/setup` returns a complete configuration bundle for OpenClaw self-setup, with the plugin URL and token pre-filled:
+`GET /api/setup` returns a complete configuration bundle for OpenClaw self-setup, with the plugin URL and bootstrap auth details pre-filled:
 
 ```json
 {
   "version": "1.0",
+  "auth": {
+    "bootstrap_endpoint": "http://.../api/auth/session",
+    "session_ttl_seconds": 300
+  },
   "skills": [{ "name": "homekit-events", "path": "...", "content": "..." }],
   "triggers": [{ "path": "...", "content": "..." }],
   "cron": { "schedule": "* * * * *", "command": "/homekit-events" },
   "claude_md_addition": "...",
-  "env": { "OPENCLAW_HB_URL": "http://...", "OPENCLAW_HB_TOKEN": "..." }
+  "env": { "OPENCLAW_HB_URL": "http://...", "OPENCLAW_HB_BOOTSTRAP_TOKEN": "..." }
 }
 ```
 
@@ -284,7 +302,7 @@ Every 1 minute (cron):
 Send this single message to your OpenClaw agent to configure the full event integration:
 
 ```
-Run /setup-homekit http://<homebridge-ip>:8865 <token>
+Run /setup-homekit http://<homebridge-ip>:8865 <bootstrap-token>
 ```
 
 The agent calls `/api/setup`, writes the skill and trigger files, registers the cron, and updates `CLAUDE.md` — no manual configuration required.
@@ -315,18 +333,22 @@ Add a new trigger by dropping a `.md` file into `.claude/homekit-triggers/` — 
 Example with `curl`:
 
 ```bash
+SESSION_TOKEN=$(curl -s -X POST \
+  -H "Authorization: Bearer BOOTSTRAP_TOKEN" \
+  http://HOMEBRIDGE_IP:8865/api/auth/session | jq -r '.access_token')
+
 # List devices
-curl -s -H "Authorization: Bearer TOKEN" http://HOMEBRIDGE_IP:8865/api/devices
+curl -s -H "Authorization: Bearer $SESSION_TOKEN" http://HOMEBRIDGE_IP:8865/api/devices
 
 # Turn on a light
 curl -s -X POST \
-  -H "Authorization: Bearer TOKEN" \
+  -H "Authorization: Bearer $SESSION_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"action":"on","value":true}' \
   http://HOMEBRIDGE_IP:8865/api/devices/DEVICE_ID/control
 
 # Check for events since a cursor
-curl -s -H "Authorization: Bearer TOKEN" \
+curl -s -H "Authorization: Bearer $SESSION_TOKEN" \
   "http://HOMEBRIDGE_IP:8865/api/events/summary?since=1745291000000"
 ```
 

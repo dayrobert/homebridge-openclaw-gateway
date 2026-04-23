@@ -31,9 +31,9 @@
         ]
       },
       "token": {
-        "title": "API Token",
+        "title": "Bootstrap Token",
         "type": "string",
-        "description": "Bearer token for authenticating OpenClaw requests. Leave empty to auto-generate."
+        "description": "Bootstrap token for minting short-lived OpenClaw session tokens. Leave empty to auto-generate."
       },
       "rateLimit": {
         "title": "Rate Limit",
@@ -42,6 +42,14 @@
         "minimum": 1,
         "maximum": 10000,
         "description": "Maximum requests per minute per IP address (1-10000)."
+      },
+      "sessionTokenTtl": {
+        "title": "Session Token TTL (seconds)",
+        "type": "integer",
+        "default": 300,
+        "minimum": 60,
+        "maximum": 3600,
+        "description": "Lifetime of issued API session tokens. Clients exchange the bootstrap token for a short-lived session token before normal API calls."
       },
       "homebridgeUiUrl": {
         "title": "Config UI X URL",
@@ -97,8 +105,8 @@
     {
       "type": "fieldset",
       "title": "Authentication",
-      "description": "The token is auto-generated if left empty. Only fill the UI credentials if auto-detection does not work.",
-      "items": ["token"]
+      "description": "The bootstrap token is auto-generated if left empty. Clients exchange it for short-lived session tokens. Only fill the UI credentials if auto-detection does not work.",
+      "items": ["token", { "key": "sessionTokenTtl", "type": "number" }]
     },
     {
       "type": "fieldset",

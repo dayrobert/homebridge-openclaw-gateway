@@ -27,7 +27,19 @@ function loadPluginForTest() {
       return () => (_req, _res, next) => next();
     }
     if (request === 'jsonwebtoken') {
-      return { sign: () => 'signed-test-token' };
+      return {
+        sign(payload, secret, options = {}) {
+          return Buffer.from(JSON.stringify({ payload, secret, options }), 'utf8').toString('base64url');
+        },
+        verify(token, secret, options = {}) {
+          const parsed = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
+          if (parsed.secret !== secret) throw new Error('invalid signature');
+          if (options.issuer && parsed.options.issuer !== options.issuer) throw new Error('jwt issuer invalid');
+          if (options.audience && parsed.options.audience !== options.audience) throw new Error('jwt audience invalid');
+          if (options.subject && parsed.options.subject !== options.subject) throw new Error('jwt subject invalid');
+          return parsed.payload;
+        },
+      };
     }
     return originalLoad(request, parent, isMain);
   };
@@ -48,6 +60,7 @@ const {
   mapType,
   resolveAction,
   clamp,
+  createApiAuth,
   setupRoutes,
   ROOMS_FILE_NAME,
 } = loadPluginForTest();
@@ -113,6 +126,14 @@ function makeRouteHarness() {
   }
 
   return { app, invoke };
+}
+
+function makeApiAuth(bootstrapToken = 'test-token') {
+  return createApiAuth(bootstrapToken, bootstrapToken, 300);
+}
+
+function makeSessionHeaders(apiAuth) {
+  return { authorization: `Bearer ${apiAuth.issueSessionToken({ clientName: 'test-suite' })}` };
 }
 
 test('normalizes room names by trimming and collapsing whitespace', () => {
@@ -323,7 +344,8 @@ test('resolveAction returns characteristic writes and clamps numeric values', ()
 
 test('POST /api/devices/:id/room returns 502 for upstream lookup failures', async () => {
   const { app, invoke } = makeRouteHarness();
-  setupRoutes(app, 'test-token', {
+  const apiAuth = makeApiAuth();
+  setupRoutes(app, apiAuth, {
     async getAccessories() {
       throw new Error('Config UI unavailable');
     },
@@ -337,7 +359,7 @@ test('POST /api/devices/:id/room returns 502 for upstream lookup failures', asyn
   });
 
   const res = await invoke('POST', '/api/devices/:id/room', {
-    headers: { authorization: 'Bearer test-token' },
+    headers: makeSessionHeaders(apiAuth),
     params: { id: 'light-1' },
     body: { room: 'Office' },
   });
@@ -348,7 +370,8 @@ test('POST /api/devices/:id/room returns 502 for upstream lookup failures', asyn
 
 test('POST /api/devices/:id/room returns 500 for local room write failures', async () => {
   const { app, invoke } = makeRouteHarness();
-  setupRoutes(app, 'test-token', {
+  const apiAuth = makeApiAuth();
+  setupRoutes(app, apiAuth, {
     async getAccessories() {
       return [{ uniqueId: 'light-1', serviceName: 'Desk Lamp', humanType: 'Lightbulb' }];
     },
@@ -362,7 +385,7 @@ test('POST /api/devices/:id/room returns 500 for local room write failures', asy
   });
 
   const res = await invoke('POST', '/api/devices/:id/room', {
-    headers: { authorization: 'Bearer test-token' },
+    headers: makeSessionHeaders(apiAuth),
     params: { id: 'light-1' },
     body: { room: 'Office' },
   });
@@ -373,7 +396,8 @@ test('POST /api/devices/:id/room returns 500 for local room write failures', asy
 
 test('POST /api/rooms/learn returns 502 for upstream lookup failures', async () => {
   const upstreamHarness = makeRouteHarness();
-  setupRoutes(upstreamHarness.app, 'test-token', {
+  const apiAuth = makeApiAuth();
+  setupRoutes(upstreamHarness.app, apiAuth, {
     async getAccessories() {
       throw new Error('Config UI unavailable');
     },
@@ -387,7 +411,7 @@ test('POST /api/rooms/learn returns 502 for upstream lookup failures', async () 
   });
 
   const upstreamRes = await upstreamHarness.invoke('POST', '/api/rooms/learn', {
-    headers: { authorization: 'Bearer test-token' },
+    headers: makeSessionHeaders(apiAuth),
     body: { devices: [{ id: 'light-1', room: 'Office' }] },
   });
 
@@ -397,7 +421,8 @@ test('POST /api/rooms/learn returns 502 for upstream lookup failures', async () 
 
 test('POST /api/rooms/learn preserves per-item validation and write errors', async () => {
   const { app, invoke } = makeRouteHarness();
-  setupRoutes(app, 'test-token', {
+  const apiAuth = makeApiAuth();
+  setupRoutes(app, apiAuth, {
     async getAccessories() {
       return [
         { uniqueId: 'light-1', serviceName: 'Desk Lamp', humanType: 'Lightbulb' },
@@ -415,7 +440,7 @@ test('POST /api/rooms/learn preserves per-item validation and write errors', asy
   });
 
   const res = await invoke('POST', '/api/rooms/learn', {
-    headers: { authorization: 'Bearer test-token' },
+    headers: makeSessionHeaders(apiAuth),
     body: {
       devices: [
         { id: 'light-1', room: '  Office  ' },
@@ -438,4 +463,35 @@ test('POST /api/rooms/learn preserves per-item validation and write errors', asy
       { id: 'switch-1', success: false, error: 'Disk full' },
     ],
   });
+});
+
+test('POST /api/auth/session exchanges the bootstrap token for a session token', async () => {
+  const { app, invoke } = makeRouteHarness();
+  const apiAuth = makeApiAuth('bootstrap-secret');
+  setupRoutes(app, apiAuth, { async getAccessories() { return []; } }, { listRooms() { return []; } }, { since() { return []; } }, { externalUrl: 'http://localhost:8865', bootstrapToken: 'bootstrap-secret' });
+
+  const res = await invoke('POST', '/api/auth/session', {
+    headers: { authorization: 'Bearer bootstrap-secret' },
+    body: { client_name: 'openclaw-test' },
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.success, true);
+  assert.equal(res.body.token_type, 'Bearer');
+  assert.equal(typeof res.body.access_token, 'string');
+  assert.equal(res.body.expires_in, 300);
+});
+
+test('session-protected routes reject the bootstrap token directly', async () => {
+  const { app, invoke } = makeRouteHarness();
+  const apiAuth = makeApiAuth('bootstrap-secret');
+  setupRoutes(app, apiAuth, { async getAccessories() { return []; } }, { listRooms() { return []; } }, { since() { return []; } });
+
+  const res = await invoke('GET', '/api/devices', {
+    headers: { authorization: 'Bearer bootstrap-secret' },
+    body: {},
+  });
+
+  assert.equal(res.statusCode, 401);
+  assert.match(res.body.message, /session token/i);
 });

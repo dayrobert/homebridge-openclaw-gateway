@@ -10,7 +10,8 @@
  * Security:
  *   - Authenticates with Config UI X internally via JWT (no plaintext
  *     passwords in config.json). Reads .uix-secrets + auth.json directly.
- *   - API token resolved from: env var → file → config → auto-generated.
+ *   - Bootstrap token resolved from: env var → file → config → auto-generated.
+ *   - Operational API access uses short-lived signed session tokens.
  *   - Rate-limited. Bind address configurable.
  *
  * Requirements:
@@ -23,7 +24,8 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 
-const { PLUGIN_NAME, ACCESSORY_NAME, DEFAULT_PORT, DEFAULT_BIND, DEFAULT_RATE_LIMIT, ROOMS_FILE_NAME } = require('./lib/constants');
+const { PLUGIN_NAME, ACCESSORY_NAME, DEFAULT_PORT, DEFAULT_BIND, DEFAULT_RATE_LIMIT, DEFAULT_SESSION_TTL, ROOMS_FILE_NAME } = require('./lib/constants');
+const { createApiAuth } = require('./lib/auth');
 const { detectStoragePath, resolveApiToken } = require('./lib/storage');
 const { RoomStore, normalizeRoomName, normalizeRoomKey } = require('./lib/room-store');
 const { UiClient } = require('./lib/ui-client');
@@ -119,7 +121,11 @@ class OpenClawPlatform {
     pollTimer.unref();
 
     const externalUrl = (this.config.pluginExternalUrl || `http://localhost:${port}`).replace(/\/+$/, '');
-    setupRoutes(app, this.apiToken, this.uiClient, roomStore, eventQueue, { externalUrl });
+    const apiAuth = createApiAuth(this.apiToken, this.apiToken, this.config.sessionTokenTtl || DEFAULT_SESSION_TTL);
+    setupRoutes(app, apiAuth, this.uiClient, roomStore, eventQueue, {
+      externalUrl,
+      bootstrapToken: this.apiToken,
+    });
 
     const server = app.listen(port, bind, () => {
       this.log.info(`[${PLUGIN_NAME}] REST API listening on ${bind}:${port}`);
@@ -136,5 +142,6 @@ module.exports._test = {
   RoomStore, normalizeRoomName, normalizeRoomKey, ROOMS_FILE_NAME,
   parseAccessories, mapType, resolveAction, clamp,
   EventQueue, classifyPriority, diffSnapshot, formatEventDescription,
+  createApiAuth,
   setupRoutes,
 };
