@@ -1,7 +1,7 @@
 {
   "name": "homebridge-openclaw-gateway",
   "displayName": "OpenClaw Gateway",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "Homebridge plugin for OpenClaw with a HomeKit control API and built-in event engine for automation and state-change triggers.",
   "main": "index.js",
   "scripts": {
