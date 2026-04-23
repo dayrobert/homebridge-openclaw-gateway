@@ -514,6 +514,8 @@ test('GET /api/setup documents device-specific trigger matching when device_name
   });
 
   assert.equal(res.statusCode, 200);
+  assert.equal(res.body.skills[0].path, '.openclaw_gateway/commands/homekit-events.md');
+  assert.equal(res.body.triggers[0].path, '.openclaw_gateway/homekit-triggers/garage-door-open.md');
   assert.match(
     res.body.skills[0].content,
     /If the trigger's `match` block also includes `device_name`, require it to equal the event's device name before treating it as a match/,

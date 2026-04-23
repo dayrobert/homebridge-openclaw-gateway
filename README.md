@@ -332,11 +332,11 @@ Send this single message to your OpenClaw agent to configure the full event inte
 Run /setup-homekit http://<homebridge-ip>:8865 <bootstrap-token>
 ```
 
-The agent calls `/api/setup`, writes the skill and trigger files, registers the cron, and updates `CLAUDE.md` — no manual configuration required.
+The agent calls `/api/setup`, writes the skill and trigger files under `.openclaw_gateway/`, registers the cron, and updates `CLAUDE.md` — no manual configuration required.
 
 **Event trigger files**
 
-After setup, `.claude/homekit-triggers/` contains instruction files that define what the agent does when a specific HomeKit event fires. Each file has a frontmatter `match` block and a body that becomes the session prompt:
+After setup, `.openclaw_gateway/homekit-triggers/` contains instruction files that define what the agent does when a specific HomeKit event fires. Each file has a frontmatter `match` block and a body that becomes the session prompt:
 
 ```markdown
 ---
@@ -353,7 +353,7 @@ The garage door just opened. Check the time, look for correlated sensor
 activity, and schedule a follow-up if the door is left open.
 ```
 
-Add a new trigger by dropping a `.md` file into `.claude/homekit-triggers/` — no code changes needed.
+Add a new trigger by dropping a `.md` file into `.openclaw_gateway/homekit-triggers/` — no code changes needed.
 If you include `match.device_name`, the trigger only fires for that exact HomeKit device name; otherwise it matches on event shape alone.
 
 ### Using from OpenClaw

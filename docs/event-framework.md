@@ -136,13 +136,13 @@ A self-describing endpoint that returns everything an OpenClaw agent needs to co
   "skills": [
     {
       "name": "homekit-events",
-      "path": ".claude/skills/homekit-events.md",
+      "path": ".openclaw_gateway/commands/homekit-events.md",
       "content": "..."
     }
   ],
   "triggers": [
     {
-      "path": ".claude/homekit-triggers/garage-door-open.md",
+      "path": ".openclaw_gateway/homekit-triggers/garage-door-open.md",
       "content": "..."
     }
   ],
@@ -163,17 +163,17 @@ A self-describing endpoint that returns everything an OpenClaw agent needs to co
 
 ## Component 4: OpenClaw Skill — `homekit-events`
 
-A skill file at `.claude/skills/homekit-events.md`. Responsible for the recurring lightweight check.
+A skill file at `.openclaw_gateway/commands/homekit-events.md`. Responsible for the recurring lightweight check.
 
 ### Execution steps
 
-1. Read the last cursor timestamp from `.claude/homekit-triggers/.cursor` (default: 30 minutes ago if file missing)
+1. Read the last cursor timestamp from `.openclaw_gateway/homekit-triggers/.cursor` (default: 30 minutes ago if file missing)
 2. Call `GET /api/events/summary?since=<cursor>`
-3. Write the returned `cursor` value back to `.claude/homekit-triggers/.cursor`
+3. Write the returned `cursor` value back to `.openclaw_gateway/homekit-triggers/.cursor`
 4. If `summary` is empty — exit silently (zero LLM tokens consumed)
 5. If `has_high_priority` is false — log the summary only (no LLM escalation)
 6. If `has_high_priority` is true:
-   - Match each event against trigger files in `.claude/homekit-triggers/`
+   - Match each event against trigger files in `.openclaw_gateway/homekit-triggers/`
    - Required match keys: `type`, `characteristic`, `to`
    - Optional strict key: `device_name` must equal the event's device name when present
    - For matched triggers: check cooldown, then fire `RemoteTrigger`
@@ -212,7 +212,7 @@ In `--digest` mode, the skill fetches all events since the previous digest and p
 
 ### Trigger Definition Files
 
-Each HomeKit event type that should launch a dedicated session gets its own file at `.claude/homekit-triggers/<event-name>.md`. Adding a new trigger type requires no code changes.
+Each HomeKit event type that should launch a dedicated session gets its own file at `.openclaw_gateway/homekit-triggers/<event-name>.md`. Adding a new trigger type requires no code changes.
 
 **Frontmatter** is machine-readable by the `homekit-events` skill:
 
@@ -262,7 +262,7 @@ The session has full access to the plugin REST API and can query other device st
 
 ### Cooldown
 
-A cooldown file at `.claude/homekit-triggers/.cooldowns.json` tracks the last-fired timestamp per trigger. If `now - last_fired < cooldown_minutes`, the trigger is skipped. This prevents a flapping sensor from spawning repeated sessions.
+A cooldown file at `.openclaw_gateway/homekit-triggers/.cooldowns.json` tracks the last-fired timestamp per trigger. If `now - last_fired < cooldown_minutes`, the trigger is skipped. This prevents a flapping sensor from spawning repeated sessions.
 
 ```json
 {
@@ -309,7 +309,7 @@ homekit-events skill
     ├─→ low priority only     → log (30 tokens)
     └─→ high priority found
             ↓
-        match .claude/homekit-triggers/garage-door-open.md
+        match .openclaw_gateway/homekit-triggers/garage-door-open.md
             ↓
         cooldown clear?
             ├─→ no  → skip
@@ -334,9 +334,9 @@ User: "Run /setup-homekit http://homebridge.local:8899 <token>"
 Plugin returns rendered bundle (skill content, trigger files, cron config, CLAUDE.md block)
     ↓
 Skill writes:
-    .claude/skills/homekit-events.md
-    .claude/homekit-triggers/garage-door-open.md
-    .claude/homekit-triggers/.cooldowns.json  (empty)
+    .openclaw_gateway/commands/homekit-events.md
+    .openclaw_gateway/homekit-triggers/garage-door-open.md
+    .openclaw_gateway/homekit-triggers/.cooldowns.json  (empty)
     CLAUDE.md  (appends integration block)
     ↓
 Skill registers cron: /schedule every minute run /homekit-events
@@ -367,8 +367,8 @@ Setup complete. Integration is live within 30s of next garage state change.
 | 3 | `GET /api/events` and `GET /api/events/summary` endpoints | `index.js` |
 | 4 | `GET /api/setup` endpoint (renders skill/trigger/cron bundle) | `index.js` |
 | 5 | `pollInterval`, `eventQueueSize` config fields | `config.schema.json` |
-| 6 | `.claude/skills/homekit-events.md` skill definition | OpenClaw project |
-| 7 | `.claude/homekit-triggers/garage-door-open.md` (and other templates) | OpenClaw project |
+| 6 | `.openclaw_gateway/commands/homekit-events.md` skill definition | OpenClaw project |
+| 7 | `.openclaw_gateway/homekit-triggers/garage-door-open.md` (and other templates) | OpenClaw project |
 | 8 | `/setup-homekit` bootstrap skill | OpenClaw project |
 | 9 | Cron registration via `/schedule` | OpenClaw session (one-time) |
 
