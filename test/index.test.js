@@ -495,3 +495,31 @@ test('session-protected routes reject the bootstrap token directly', async () =>
   assert.equal(res.statusCode, 401);
   assert.match(res.body.message, /session token/i);
 });
+
+test('GET /api/setup documents device-specific trigger matching when device_name is present', async () => {
+  const { app, invoke } = makeRouteHarness();
+  const apiAuth = makeApiAuth('bootstrap-secret');
+  setupRoutes(
+    app,
+    apiAuth,
+    { async getAccessories() { return []; } },
+    { listRooms() { return []; } },
+    { since() { return []; } },
+    { externalUrl: 'http://localhost:8865', bootstrapToken: 'bootstrap-secret' },
+  );
+
+  const res = await invoke('GET', '/api/setup', {
+    headers: { authorization: 'Bearer bootstrap-secret' },
+    body: {},
+  });
+
+  assert.equal(res.statusCode, 200);
+  assert.match(
+    res.body.skills[0].content,
+    /If the trigger's `match` block also includes `device_name`, require it to equal the event's device name before treating it as a match/,
+  );
+  assert.match(
+    res.body.claude_md_addition,
+    /Use `match\.device_name` when a trigger should only fire for one specific HomeKit device\./,
+  );
+});

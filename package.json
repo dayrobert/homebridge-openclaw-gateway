@@ -5,6 +5,7 @@
   "description": "Homebridge plugin for OpenClaw with a HomeKit control API and built-in event engine for automation and state-change triggers.",
   "main": "index.js",
   "scripts": {
+    "dev:api": "node scripts/local-api.js",
     "test": "node --test",
     "publish:npm": "npm publish --cache /tmp/openclaw-npm-cache",
     "publish:npm:dry-run": "npm pack --dry-run --cache /tmp/openclaw-npm-cache"

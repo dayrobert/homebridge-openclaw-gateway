@@ -120,6 +120,35 @@ Configure the same value in OpenClaw.
 
 Base URL: `http://<homebridge-ip>:8865`
 
+For local Postman testing outside the Homebridge plugin lifecycle, you can also run the API directly from this repo:
+
+```bash
+npm install
+OPENCLAW_HB_TOKEN=dev-bootstrap-token npm run dev:api
+```
+
+By default the local runner binds to `http://127.0.0.1:8865`. It uses the same Config UI X connection logic as the plugin, so if auto-detection is unavailable set these env vars before starting it:
+
+```bash
+export UIX_STORAGE_PATH=/path/to/homebridge/storage
+export HOMEBRIDGE_UI_URL=http://127.0.0.1:8581
+export HOMEBRIDGE_UI_USER=admin
+export HOMEBRIDGE_UI_PASS=admin
+```
+
+Optional env vars for local hosting:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `OPENCLAW_API_PORT` | `8865` | Local API port |
+| `OPENCLAW_API_BIND` | `127.0.0.1` | Bind address for Postman/local-only access |
+| `OPENCLAW_HB_TOKEN` | auto | Bootstrap token used to mint session tokens |
+| `OPENCLAW_EXTERNAL_URL` | `http://localhost:<port>` | URL embedded into `/api/setup` |
+| `OPENCLAW_SESSION_TTL` | `300` | Session token TTL in seconds |
+| `OPENCLAW_RATE_LIMIT` | `100` | Requests per minute |
+| `OPENCLAW_POLL_INTERVAL` | `30` | Event poll interval in seconds |
+| `OPENCLAW_EVENT_QUEUE_SIZE` | `200` | In-memory event buffer size |
+
 Authentication flow:
 
 1. Exchange the bootstrap token for a session token:
@@ -325,6 +354,7 @@ activity, and schedule a follow-up if the door is left open.
 ```
 
 Add a new trigger by dropping a `.md` file into `.claude/homekit-triggers/` — no code changes needed.
+If you include `match.device_name`, the trigger only fires for that exact HomeKit device name; otherwise it matches on event shape alone.
 
 ### Using from OpenClaw
 

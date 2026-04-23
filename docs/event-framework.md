@@ -174,6 +174,8 @@ A skill file at `.claude/skills/homekit-events.md`. Responsible for the recurrin
 5. If `has_high_priority` is false — log the summary only (no LLM escalation)
 6. If `has_high_priority` is true:
    - Match each event against trigger files in `.claude/homekit-triggers/`
+   - Required match keys: `type`, `characteristic`, `to`
+   - Optional strict key: `device_name` must equal the event's device name when present
    - For matched triggers: check cooldown, then fire `RemoteTrigger`
    - Fetch full event detail via `GET /api/events?priority=high&since=<cursor>` for the session context
 
@@ -221,6 +223,8 @@ match:
   type: garage
   characteristic: CurrentDoorState
   to: 0
+  # Optional: constrain the trigger to one exact HomeKit device name
+  device_name: Garage Door
 priority: high
 cooldown_minutes: 10
 ---
