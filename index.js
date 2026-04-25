@@ -27,6 +27,7 @@ const { RoomStore, normalizeRoomName, normalizeRoomKey } = require('./lib/room-s
 const { UiClient } = require('./lib/ui-client');
 const { parseAccessories, mapType, resolveAction, clamp } = require('./lib/devices');
 const { EventQueue, classifyPriority, diffSnapshot, formatEventDescription } = require('./lib/events');
+const { createEventSink, normalizeEventSource, normalizeSubscribeTypes, getHapCharacteristicTypes } = require('./lib/event-sources');
 const { createApiAuth } = require('./lib/auth');
 const { setupRoutes } = require('./lib/routes');
 const { startApiServer } = require('./lib/server');
@@ -78,6 +79,7 @@ module.exports._test = {
   RoomStore, normalizeRoomName, normalizeRoomKey, ROOMS_FILE_NAME,
   parseAccessories, mapType, resolveAction, clamp,
   EventQueue, classifyPriority, diffSnapshot, formatEventDescription,
+  createEventSink, normalizeEventSource, normalizeSubscribeTypes, getHapCharacteristicTypes,
   createApiAuth,
   setupRoutes,
 };

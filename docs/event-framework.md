@@ -324,6 +324,149 @@ homekit-events skill
 
 ---
 
+## Alternative Producer: Direct HAP Event Subscription
+
+The current design is "push to OpenClaw, pull from Homebridge." A more real-time variant is to subscribe to HomeKit Accessory Protocol characteristic notifications and feed those directly into the same `EventQueue`.
+
+This would not change the OpenClaw-facing contract:
+
+- `GET /api/events`
+- `GET /api/events/summary`
+- `GET /api/setup`
+- trigger files, cooldowns, and cron behavior
+
+Only the **event producer** changes.
+
+### Why this is interesting
+
+- Lower detection latency: characteristic notifications can arrive almost immediately after a state change
+- Less repeated upstream work: no full `/api/accessories` snapshot fetch every 30 seconds
+- Better fit for automation-style reactions such as garage, lock, motion, and contact events
+
+### Important constraint in this plugin
+
+Today the plugin talks to **Config UI X REST**, not directly to the Homebridge HAP server or accessory transports. That means the plugin currently has:
+
+- no HAP pairing/session management
+- no direct characteristic subscription mechanism
+- no bridge/accessory discovery flow
+
+So a HAP-notification approach is not a small tweak to `uiClient.getAccessories()`; it is a second integration path.
+
+### Recommended architecture
+
+Introduce an internal `EventSource` boundary:
+
+```text
+PollingEventSource     -> normalize event -> EventQueue
+HapSubscriptionSource  -> normalize event -> EventQueue
+```
+
+Both sources emit the same normalized event shape:
+
+```json
+{
+  "id": "abc123",
+  "name": "Garage Door",
+  "type": "garage",
+  "room": "Garage",
+  "changes": {
+    "CurrentDoorState": { "from": 1, "to": 0 }
+  },
+  "priority": "high"
+}
+```
+
+This keeps the rest of the system unchanged and lets us compare latency and reliability source-by-source.
+
+### Best first experiment: hybrid mode
+
+Rather than replacing polling immediately, add a hybrid mode:
+
+```json
+{
+  "eventSource": "hybrid"
+}
+```
+
+Behavior:
+
+1. HAP subscription path listens for real-time notifications on selected characteristics
+2. Existing poller remains enabled at a slower interval as a safety net
+3. Duplicate events are coalesced by device id + characteristic + value + short time window
+4. If the HAP stream drops, polling continues and the OpenClaw contract stays intact
+
+This gives the fastest feedback loop without making the system brittle.
+
+### Candidate characteristics for HAP subscription
+
+Start narrow and high-value:
+
+- `CurrentDoorState`
+- `LockCurrentState`
+- `MotionDetected`
+- `ContactSensorState`
+- `ProgrammableSwitchEvent`
+
+These are the events where lower latency is most useful and token spend is easiest to justify.
+
+### Rough implementation sketch
+
+1. Keep `EventQueue`, `classifyPriority`, trigger matching, and `/api/events*` exactly as they are
+2. Move the event-production logic in `lib/server.js` behind an `EventSource` abstraction
+3. Keep the existing polling logic as `PollingEventSource`
+4. Add an experimental `HapSubscriptionSource` that:
+   - discovers or is configured with the Homebridge bridge/accessory target
+   - establishes a HAP controller session
+   - subscribes only to selected characteristics
+   - normalizes notifications into the existing event format
+5. Add dedupe logic before `eventQueue.push(...)`
+6. Add source health status to `/health`
+
+### Risks and unknowns
+
+- Pairing: a HAP subscriber needs controller credentials, key storage, and reconnect behavior
+- Surface area: Homebridge plugin APIs do not currently expose this path in the same simple way Config UI X does
+- Accessory mapping: HAP identifiers may not line up cleanly with today's `parseAccessories()` ids
+- Reliability: notification streams can disconnect silently unless heartbeat/re-subscribe logic is solid
+- Scope creep: "real-time" can become "we are now building a HomeKit controller"
+
+### Practical recommendation
+
+If the goal is to **play with the concept**, do not replace the current poller first.
+
+Do this instead:
+
+1. Refactor the current poller into `PollingEventSource`
+2. Add a source-agnostic `emitEvent()` path with dedupe
+3. Prototype `HapSubscriptionSource` behind an opt-in config flag
+4. Run in `hybrid` mode and compare:
+   - latency
+   - duplicate rate
+   - disconnect behavior
+   - coverage of important characteristics
+
+If the HAP path proves stable, polling can become a fallback instead of the primary source.
+
+### New configuration fields for the experiment
+
+```json
+{
+  "eventSource": "poll",
+  "pollInterval": 30,
+  "hapFallbackPollInterval": 120,
+  "hapSubscribeTypes": ["garage", "lock", "motion", "contact"]
+}
+```
+
+Suggested semantics:
+
+- `poll` — current behavior
+- `hap` — HAP subscription only
+- `hybrid` — HAP primary, polling fallback
+
+---
+
 ## Self-Describing Setup Flow
 
 ```

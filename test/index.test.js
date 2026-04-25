@@ -60,6 +60,10 @@ const {
   mapType,
   resolveAction,
   clamp,
+  createEventSink,
+  normalizeEventSource,
+  normalizeSubscribeTypes,
+  getHapCharacteristicTypes,
   createApiAuth,
   setupRoutes,
   ROOMS_FILE_NAME,
@@ -342,6 +346,30 @@ test('resolveAction returns characteristic writes and clamps numeric values', ()
   assert.equal(clamp(-5, 0, 10), 0);
 });
 
+test('event source helpers normalize modes and HAP subscribe types', () => {
+  assert.equal(normalizeEventSource('HYBRID'), 'hybrid');
+  assert.equal(normalizeEventSource('mystery'), 'poll');
+  assert.deepEqual(normalizeSubscribeTypes(['garage', ' lock ', 'garage', '', null]), ['garage', 'lock']);
+  assert.deepEqual(getHapCharacteristicTypes(['garage', 'contact', 'garage']), ['CurrentDoorState', 'ContactSensorState']);
+});
+
+test('event sink de-duplicates identical events within a short window', () => {
+  const pushed = [];
+  const sink = createEventSink({
+    eventQueue: {
+      push(event) {
+        pushed.push(event);
+      },
+    },
+    dedupeWindowMs: 5000,
+  });
+
+  assert.equal(sink.emit({ id: 'garage-1', changes: { CurrentDoorState: { from: 1, to: 0 } }, source: 'poll' }), true);
+  assert.equal(sink.emit({ id: 'garage-1', changes: { CurrentDoorState: { from: 1, to: 0 } }, source: 'hap' }), false);
+  assert.equal(sink.emit({ id: 'garage-1', changes: { CurrentDoorState: { from: 0, to: 1 } }, source: 'hap' }), true);
+  assert.equal(pushed.length, 2);
+});
+
 test('POST /api/devices/:id/room returns 502 for upstream lookup failures', async () => {
   const { app, invoke } = makeRouteHarness();
   const apiAuth = makeApiAuth();
@@ -524,4 +552,62 @@ test('GET /api/setup documents device-specific trigger matching when device_name
     res.body.claude_md_addition,
     /Use `match\.device_name` when a trigger should only fire for one specific HomeKit device\./,
   );
+  assert.deepEqual(res.body.eventing, undefined);
+});
+
+test('health and setup surface event-source status when provided', async () => {
+  const { app, invoke } = makeRouteHarness();
+  const apiAuth = makeApiAuth('bootstrap-secret');
+  const eventing = {
+    mode: 'hybrid',
+    queued_events: 4,
+    sources: {
+      poll: { state: 'running', detail: 'Polling Config UI X every 120s.' },
+      hap: { state: 'unsupported', detail: 'UiClient does not expose HAP characteristic subscriptions yet.' },
+    },
+  };
+
+  setupRoutes(
+    app,
+    apiAuth,
+    {
+      async getAccessories() {
+        return [{ uniqueId: 'light-1', serviceName: 'Desk Lamp', humanType: 'Lightbulb' }];
+      },
+    },
+    {
+      listRooms() {
+        return [];
+      },
+      getRoom() {
+        return null;
+      },
+    },
+    {
+      count() {
+        return 4;
+      },
+      since() {
+        return [];
+      },
+    },
+    {
+      externalUrl: 'http://localhost:8865',
+      bootstrapToken: 'bootstrap-secret',
+      getEventingStatus: () => eventing,
+    },
+  );
+
+  const healthRes = await invoke('GET', '/health', { headers: {}, body: {} });
+  assert.equal(healthRes.statusCode, 200);
+  assert.equal(healthRes.body.eventing.mode, 'hybrid');
+  assert.equal(healthRes.body.eventing.queued_events, 4);
+  assert.equal(healthRes.body.eventing.sources.hap.state, 'unsupported');
+
+  const setupRes = await invoke('GET', '/api/setup', {
+    headers: { authorization: 'Bearer bootstrap-secret' },
+    body: {},
+  });
+  assert.equal(setupRes.statusCode, 200);
+  assert.equal(setupRes.body.eventing.mode, 'hybrid');
 });

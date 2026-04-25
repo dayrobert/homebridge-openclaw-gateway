@@ -39,7 +39,10 @@ The plugin will automatically detect UI credentials, generate a unique bootstrap
   "token": "my-custom-token",
   "sessionTokenTtl": 300,
   "rateLimit": 100,
+  "eventSource": "poll",
   "pollInterval": 30,
+  "hapFallbackPollInterval": 120,
+  "hapSubscribeTypes": ["garage", "lock", "motion", "contact"],
   "eventQueueSize": 200,
   "pluginExternalUrl": "http://homebridge.local:8865",
   "homebridgeUiUrl": "http://localhost:8581",
@@ -55,7 +58,10 @@ The plugin will automatically detect UI credentials, generate a unique bootstrap
 | `token` | string | auto | Bootstrap token used to mint short-lived API session tokens |
 | `sessionTokenTtl` | number | `300` | Session token lifetime in seconds (60-3600) |
 | `rateLimit` | number | `100` | Max requests per minute per IP |
+| `eventSource` | string | `poll` | Event producer mode: `poll`, `hap` (experimental), or `hybrid` (experimental) |
 | `pollInterval` | number | `30` | How often (seconds) the plugin checks HomeKit for state changes (10–300) |
+| `hapFallbackPollInterval` | number | `120` | In `hybrid` mode, how often polling runs as a fallback safety net |
+| `hapSubscribeTypes` | array | `["garage","lock","motion","contact"]` | Experimental HAP categories to subscribe to when HAP mode is enabled |
 | `eventQueueSize` | number | `200` | Max events held in memory; oldest are dropped when full (50–1000) |
 | `pluginExternalUrl` | string | `http://localhost:<apiPort>` | URL OpenClaw uses to reach this plugin; used in the `/api/setup` bundle |
 | `homebridgeUiUrl` | string | `http://localhost:8581` | Config UI X URL (only if not default) |
@@ -256,6 +262,18 @@ Every `pollInterval` seconds (default 30), the plugin fetches the current state 
 | `high` | Locks, garage doors, motion sensors, contact sensors |
 | `medium` | Thermostats, temperature/humidity sensors |
 | `low` | Lights, switches, outlets, fans, blinds |
+
+**Experimental HAP mode**
+
+The plugin now has an internal event-source abstraction so it can support different producers without changing the OpenClaw API. `eventSource: "hap"` and `eventSource: "hybrid"` are experimental scaffolding for direct HAP characteristic notifications.
+
+Right now the default `UiClient` does **not** implement a real HAP subscription transport, so:
+
+- `poll` is the stable mode
+- `hybrid` runs the HAP source if available and keeps polling as fallback
+- `hap` only works if a future/custom `UiClient.subscribeCharacteristics()` implementation is provided
+
+You can inspect source health in `GET /health` under the `eventing` field.
 
 **Event endpoints**
 

@@ -75,6 +75,35 @@
         "maximum": 300,
         "description": "How often the plugin checks HomeKit for state changes to populate the event queue (10-300s)."
       },
+      "eventSource": {
+        "title": "Event Source Mode",
+        "type": "string",
+        "default": "poll",
+        "description": "Choose how state-change events are produced. 'poll' is stable, 'hap' is experimental, and 'hybrid' uses HAP with polling fallback.",
+        "oneOf": [
+          { "title": "Poll only", "enum": ["poll"] },
+          { "title": "HAP only (experimental)", "enum": ["hap"] },
+          { "title": "Hybrid (experimental)", "enum": ["hybrid"] }
+        ]
+      },
+      "hapFallbackPollInterval": {
+        "title": "HAP Fallback Poll Interval (seconds)",
+        "type": "integer",
+        "default": 120,
+        "minimum": 10,
+        "maximum": 300,
+        "description": "In hybrid mode, how often to poll as a safety net if HAP notifications are delayed or dropped."
+      },
+      "hapSubscribeTypes": {
+        "title": "HAP Subscribe Types",
+        "type": "array",
+        "description": "Experimental HAP subscription categories to listen for when HAP mode is enabled.",
+        "items": {
+          "type": "string",
+          "enum": ["garage", "lock", "motion", "contact", "statelessswitch"]
+        },
+        "default": ["garage", "lock", "motion", "contact"]
+      },
       "eventQueueSize": {
         "title": "Event Queue Size",
         "type": "integer",
@@ -113,7 +142,10 @@
       "title": "Event Framework",
       "expandable": true,
       "items": [
+        "eventSource",
         { "key": "pollInterval", "type": "number" },
+        { "key": "hapFallbackPollInterval", "type": "number" },
+        "hapSubscribeTypes",
         { "key": "eventQueueSize", "type": "number" },
         "pluginExternalUrl"
       ]
